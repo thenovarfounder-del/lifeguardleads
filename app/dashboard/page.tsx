@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 const COUNTIES = ['All Counties','Miami-Dade','Broward','Palm Beach','Orange','Osceola','Seminole','Lake','Polk','Hillsborough','Collier','St. Lucie','Martin','Indian River'];

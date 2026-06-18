@@ -19,7 +19,7 @@ export default function Dashboard() {
   const [status, setStatus] = useState('All');
   const [search, setSearch] = useState('');
   const [stats, setStats] = useState({ total:0, new:0, called:0, interested:0, closed:0 });
-  const [selectedLead, setSelectedLead] = useState(null);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
   const [notes, setNotes] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -60,7 +60,7 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  const updateStatus = async (id, newStatus) => {
+  const updateStatus = async (id: number, newStatus: string) => {
     await supabase.from('leads').update({ status: newStatus }).eq('id', id);
     fetchLeads();
     if (selectedLead?.id === id) setSelectedLead({...selectedLead, status: newStatus});
@@ -73,7 +73,7 @@ export default function Dashboard() {
     alert('Notes saved!');
   };
 
-  const saveNewLead = async () => {
+  const saveNewLead = async (): Promise<void> => {
     if (!newLead.owner_name && !newLead.property_address) {
       alert('Please enter at least a name or address');
       return;

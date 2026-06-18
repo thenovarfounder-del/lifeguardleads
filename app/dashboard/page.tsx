@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 const COUNTIES = ['All Counties','Miami-Dade','Broward','Palm Beach','Orange','Osceola','Seminole','Lake','Polk','Hillsborough','Collier','St. Lucie','Martin','Indian River'];
@@ -13,14 +13,21 @@ const STATUSES = ['All','New','Called','Interested','Closed','Dead'];
 
 export default function Dashboard() {
   const router = useRouter();
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [county, setCounty] = useState('All Counties');
   const [status, setStatus] = useState('All');
   const [search, setSearch] = useState('');
   const [stats, setStats] = useState({ total:0, new:0, called:0, interested:0, closed:0 });
-  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [selectedLead, setSelectedLead] = useState(null);
   const [notes, setNotes] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newLead, setNewLead] = useState({
+    owner_name:'', property_address:'', city:'', county:'Miami-Dade',
+    phone1:'', phone2:'', email1:'', permit_type:'Impact Window/Door',
+    permit_date:'', job_value:'', permit_number:'', contractor:''
+  });
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -53,7 +60,7 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  const updateStatus = async (id: number, newStatus: string) => {
+  const updateStatus = async (id, newStatus) => {
     await supabase.from('leads').update({ status: newStatus }).eq('id', id);
     fetchLeads();
     if (selectedLead?.id === id) setSelectedLead({...selectedLead, status: newStatus});
@@ -64,6 +71,31 @@ export default function Dashboard() {
     await supabase.from('leads').update({ notes }).eq('id', selectedLead.id);
     fetchLeads();
     alert('Notes saved!');
+  };
+
+  const saveNewLead = async () => {
+    if (!newLead.owner_name && !newLead.property_address) {
+      alert('Please enter at least a name or address');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('leads').insert([{
+      ...newLead,
+      status: 'New',
+      date_scraped: new Date().toISOString()
+    }]);
+    if (error) {
+      alert('Error saving lead: ' + error.message);
+    } else {
+      setShowAddForm(false);
+      setNewLead({
+        owner_name:'', property_address:'', city:'', county:'Miami-Dade',
+        phone1:'', phone2:'', email1:'', permit_type:'Impact Window/Door',
+        permit_date:'', job_value:'', permit_number:'', contractor:''
+      });
+      fetchLeads();
+    }
+    setSaving(false);
   };
 
   const filtered = leads.filter(l =>
@@ -78,7 +110,7 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  const statusColor: any = {
+  const statusColor = {
     'New': '#0EA5E9',
     'Called': '#F59E0B',
     'Interested': '#8B5CF6',
@@ -99,6 +131,7 @@ export default function Dashboard() {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
           <div style={{fontSize:'13px',color:'#64748B'}}>{new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+          <button onClick={() => setShowAddForm(true)} style={{background:'#22C55E',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 16px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>+ Add Lead</button>
           <button onClick={logout} style={{background:'#334155',color:'#94A3B8',border:'none',borderRadius:'6px',padding:'8px 16px',fontSize:'13px',cursor:'pointer'}}>Logout</button>
         </div>
       </div>
@@ -137,7 +170,7 @@ export default function Dashboard() {
             style={{padding:'10px 14px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none'}}>
             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <button onClick={fetchLeads} className="btn">Refresh</button>
+          <button onClick={fetchLeads} style={{background:'#0EA5E9',color:'#fff',border:'none',borderRadius:'6px',padding:'10px 20px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>Refresh</button>
         </div>
 
         <div style={{display:'grid',gridTemplateColumns:selectedLead ? '1fr 380px' : '1fr',gap:'16px'}}>
@@ -160,7 +193,7 @@ export default function Dashboard() {
                   {loading ? (
                     <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#64748B'}}>Loading leads...</td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#64748B'}}>No leads yet. Run the scraper to get started.</td></tr>
+                    <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#64748B'}}>No leads yet. Click + Add Lead to add your first lead.</td></tr>
                   ) : filtered.map((lead, i) => (
                     <tr key={lead.id} onClick={() => { setSelectedLead(lead); setNotes(lead.notes || ''); }}
                       style={{borderBottom:'1px solid #1E293B',cursor:'pointer',background:selectedLead?.id===lead.id?'#1E3A5F':i%2===0?'#1E293B':'#162032',transition:'background 0.1s'}}>
@@ -194,13 +227,11 @@ export default function Dashboard() {
                 <div style={{fontSize:'15px',fontWeight:'700',color:'#fff'}}>Lead Details</div>
                 <button onClick={() => setSelectedLead(null)} style={{background:'none',border:'none',color:'#64748B',fontSize:'18px',cursor:'pointer'}}>✕</button>
               </div>
-
               <div style={{marginBottom:'20px',padding:'16px',background:'#0F172A',borderRadius:'8px',border:'1px solid #334155'}}>
                 <div style={{fontSize:'16px',fontWeight:'700',color:'#fff',marginBottom:'4px'}}>{selectedLead.owner_name || 'Unknown Owner'}</div>
                 <div style={{fontSize:'13px',color:'#94A3B8',marginBottom:'2px'}}>{selectedLead.property_address}</div>
                 <div style={{fontSize:'12px',color:'#64748B'}}>{selectedLead.city}, FL · {selectedLead.county} County</div>
               </div>
-
               <div style={{marginBottom:'20px'}}>
                 <div style={{fontSize:'11px',fontWeight:'600',color:'#64748B',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'12px'}}>Contact Info</div>
                 {[selectedLead.phone1, selectedLead.phone2, selectedLead.phone3].filter(Boolean).map((phone, i) => (
@@ -216,7 +247,6 @@ export default function Dashboard() {
                   </a>
                 ))}
               </div>
-
               <div style={{marginBottom:'20px'}}>
                 <div style={{fontSize:'11px',fontWeight:'600',color:'#64748B',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'12px'}}>Permit Info</div>
                 {[
@@ -232,7 +262,6 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-
               <div style={{marginBottom:'20px'}}>
                 <div style={{fontSize:'11px',fontWeight:'600',color:'#64748B',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'8px'}}>Update Status</div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
@@ -244,22 +273,84 @@ export default function Dashboard() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <div style={{fontSize:'11px',fontWeight:'600',color:'#64748B',textTransform:'uppercase',letterSpacing:'1px',marginBottom:'8px'}}>Notes</div>
-                <textarea
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  placeholder="Add notes about this lead..."
-                  rows={4}
-                  style={{width:'100%',padding:'10px 12px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none',resize:'vertical',marginBottom:'8px'}}
-                />
-                <button onClick={saveNotes} className="btn" style={{width:'100%'}}>Save Notes</button>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes about this lead..." rows={4}
+                  style={{width:'100%',padding:'10px 12px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none',resize:'vertical',marginBottom:'8px'}}/>
+                <button onClick={saveNotes} style={{width:'100%',background:'#0EA5E9',color:'#fff',border:'none',borderRadius:'6px',padding:'10px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>Save Notes</button>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* ADD LEAD MODAL */}
+      {showAddForm && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+          <div style={{background:'#1E293B',borderRadius:'12px',padding:'32px',maxWidth:'560px',width:'100%',maxHeight:'90vh',overflowY:'auto',border:'1px solid #334155'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'24px'}}>
+              <h2 style={{fontSize:'20px',fontWeight:'700',color:'#fff'}}>Add New Lead</h2>
+              <button onClick={() => setShowAddForm(false)} style={{background:'none',border:'none',color:'#64748B',fontSize:'20px',cursor:'pointer'}}>✕</button>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
+              {[
+                {label:'Owner Name',key:'owner_name',placeholder:'John Smith'},
+                {label:'Property Address',key:'property_address',placeholder:'123 Main St'},
+                {label:'City',key:'city',placeholder:'Miami'},
+                {label:'Phone 1',key:'phone1',placeholder:'(305) 555-0000'},
+                {label:'Phone 2',key:'phone2',placeholder:'(305) 555-0001'},
+                {label:'Email',key:'email1',placeholder:'owner@email.com'},
+                {label:'Permit Number',key:'permit_number',placeholder:'BLD-2026-00123'},
+                {label:'Job Value',key:'job_value',placeholder:'$25,000'},
+                {label:'Permit Date',key:'permit_date',placeholder:'2026-06-18'},
+                {label:'Contractor',key:'contractor',placeholder:'ABC Windows LLC'},
+              ].map(field => (
+                <div key={field.key}>
+                  <label style={{display:'block',fontSize:'12px',fontWeight:'500',color:'#94A3B8',marginBottom:'6px'}}>{field.label}</label>
+                  <input
+                    placeholder={field.placeholder}
+                    value={newLead[field.key]}
+                    onChange={e => setNewLead({...newLead,[field.key]:e.target.value})}
+                    style={{width:'100%',padding:'10px 12px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none',boxSizing:'border-box'}}
+                  />
+                </div>
+              ))}
+
+              <div>
+                <label style={{display:'block',fontSize:'12px',fontWeight:'500',color:'#94A3B8',marginBottom:'6px'}}>County</label>
+                <select value={newLead.county} onChange={e => setNewLead({...newLead,county:e.target.value})}
+                  style={{width:'100%',padding:'10px 12px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none'}}>
+                  {COUNTIES.filter(c => c !== 'All Counties').map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{display:'block',fontSize:'12px',fontWeight:'500',color:'#94A3B8',marginBottom:'6px'}}>Permit Type</label>
+                <select value={newLead.permit_type} onChange={e => setNewLead({...newLead,permit_type:e.target.value})}
+                  style={{width:'100%',padding:'10px 12px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none'}}>
+                  <option>Impact Window/Door</option>
+                  <option>Impact Window</option>
+                  <option>Impact Door</option>
+                  <option>Window Replacement</option>
+                  <option>Door Replacement</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{display:'flex',gap:'12px',marginTop:'24px'}}>
+              <button onClick={saveNewLead} disabled={saving}
+                style={{flex:1,background:'#22C55E',color:'#fff',border:'none',borderRadius:'8px',padding:'14px',fontSize:'15px',fontWeight:'600',cursor:'pointer'}}>
+                {saving ? 'Saving...' : 'Save Lead ✓'}
+              </button>
+              <button onClick={() => setShowAddForm(false)}
+                style={{background:'#334155',color:'#94A3B8',border:'none',borderRadius:'8px',padding:'14px 24px',fontSize:'15px',cursor:'pointer'}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

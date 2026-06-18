@@ -110,7 +110,7 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  const statusColor = {
+  const statusColor: Record<string, string> = {
     'New': '#0EA5E9',
     'Called': '#F59E0B',
     'Interested': '#8B5CF6',

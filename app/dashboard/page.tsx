@@ -13,7 +13,7 @@ const STATUSES = ['All','New','Called','Interested','Closed','Dead'];
 
 export default function Dashboard() {
   const router = useRouter();
-  const [leads, setLeads] = useState([]);
+  const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [county, setCounty] = useState('All Counties');
   const [status, setStatus] = useState('All');

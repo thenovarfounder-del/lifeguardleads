@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -29,7 +29,11 @@ export default function Dashboard() {
   const [selectedLead, setSelectedLead] = useState(null);
   const [notes, setNotes] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showCSV, setShowCSV] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const fileRef = useRef(null);
   const [newLead, setNewLead] = useState({
     owner_name:'', property_address:'', city:'', county:'Miami-Dade',
     phone1:'', phone2:'', email1:'', permit_type:'Impact Window/Door',
@@ -104,6 +108,79 @@ export default function Dashboard() {
     setSaving(false);
   };
 
+  const parseCSV = (text) => {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_').replace(/"/g,''));
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g,''));
+      const row = {};
+      headers.forEach((h, idx) => { row[h] = vals[idx] || ''; });
+      rows.push(row);
+    }
+    return rows;
+  };
+
+  const mapRow = (row) => {
+    // Try to map common CSV column names to our schema
+    return {
+      owner_name: row.owner_name || row.name || row.owner || row.full_name || row.contact_name || '',
+      property_address: row.property_address || row.address || row.street_address || row.site_address || '',
+      city: row.city || row.site_city || '',
+      county: row.county || 'Unknown',
+      phone1: row.phone1 || row.phone || row.phone_1 || row.mobile || row.cell || row.telephone || '',
+      phone2: row.phone2 || row.phone_2 || row.alt_phone || '',
+      phone3: row.phone3 || row.phone_3 || '',
+      email1: row.email1 || row.email || row.email_address || '',
+      email2: row.email2 || row.email_2 || '',
+      permit_number: row.permit_number || row.permit_no || row.permit || '',
+      permit_type: row.permit_type || row.description || row.work_description || 'Impact Window/Door',
+      permit_date: row.permit_date || row.issue_date || row.date || row.filed_date || '',
+      job_value: row.job_value || row.value || row.estimated_value || row.contract_value || '',
+      contractor: row.contractor || row.contractor_name || '',
+      status: 'New',
+      date_scraped: new Date().toISOString(),
+    };
+  };
+
+  const handleCSVUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+
+    const text = await file.text();
+    const rows = parseCSV(text);
+
+    if (rows.length === 0) {
+      setImportResult({ error: 'No data found in CSV file' });
+      setImporting(false);
+      return;
+    }
+
+    const mapped = rows.map(mapRow).filter(r => r.owner_name || r.property_address);
+    let saved = 0;
+    let failed = 0;
+
+    // Import in batches of 50
+    const batchSize = 50;
+    for (let i = 0; i < mapped.length; i += batchSize) {
+      const batch = mapped.slice(i, i + batchSize);
+      const { error } = await supabase.from('leads').insert(batch);
+      if (error) {
+        failed += batch.length;
+      } else {
+        saved += batch.length;
+      }
+    }
+
+    setImportResult({ saved, failed, total: rows.length });
+    setImporting(false);
+    fetchLeads();
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
   const filtered = leads.filter(l =>
     search === '' ||
     l.owner_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -131,6 +208,7 @@ export default function Dashboard() {
 
   return (
     <div style={{minHeight:'100vh',background:'#0F172A'}}>
+      {/* NAV */}
       <div style={{background:'#1E293B',borderBottom:'1px solid #334155',padding:'0 24px',display:'flex',alignItems:'center',justifyContent:'space-between',height:'64px'}}>
         <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
           <span style={{fontSize:'24px'}}>🛡️</span>
@@ -141,12 +219,14 @@ export default function Dashboard() {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
           <div style={{fontSize:'13px',color:'#64748B'}}>{new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+          <button onClick={() => setShowCSV(true)} style={{background:'#7C3AED',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 16px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>📂 Import CSV</button>
           <button onClick={() => setShowAddForm(true)} style={{background:'#22C55E',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 16px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>+ Add Lead</button>
           <button onClick={logout} style={{background:'#334155',color:'#94A3B8',border:'none',borderRadius:'6px',padding:'8px 16px',fontSize:'13px',cursor:'pointer'}}>Logout</button>
         </div>
       </div>
 
       <div style={{padding:'24px'}}>
+        {/* STATS */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'16px',marginBottom:'24px'}}>
           {[
             {label:'Total Leads',value:stats.total,color:'#0EA5E9',icon:'📋'},
@@ -163,6 +243,7 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* FILTERS */}
         <div style={{background:'#1E293B',border:'1px solid #334155',borderRadius:'8px',padding:'16px',marginBottom:'16px',display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'center'}}>
           <input placeholder="Search name, address, phone..." value={search} onChange={e => setSearch(e.target.value)}
             style={{flex:1,minWidth:'200px',padding:'10px 14px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none'}}/>
@@ -178,6 +259,7 @@ export default function Dashboard() {
         </div>
 
         <div style={{display:'grid',gridTemplateColumns:selectedLead ? '1fr 380px' : '1fr',gap:'16px'}}>
+          {/* TABLE */}
           <div style={{background:'#1E293B',border:'1px solid #334155',borderRadius:'8px',overflow:'hidden'}}>
             <div style={{padding:'16px 20px',borderBottom:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <div style={{fontSize:'15px',fontWeight:'600',color:'#fff'}}>{filtered.length} Leads</div>
@@ -196,7 +278,7 @@ export default function Dashboard() {
                   {loading ? (
                     <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#64748B'}}>Loading leads...</td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#64748B'}}>No leads yet. Click + Add Lead to add your first lead.</td></tr>
+                    <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#64748B'}}>No leads yet. Click Import CSV or + Add Lead to get started.</td></tr>
                   ) : filtered.map((lead, i) => (
                     <tr key={lead.id} onClick={() => { setSelectedLead(lead); setNotes(lead.notes || ''); }}
                       style={{borderBottom:'1px solid #1E293B',cursor:'pointer',background:selectedLead?.id===lead.id?'#1E3A5F':i%2===0?'#1E293B':'#162032'}}>
@@ -223,6 +305,7 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* DETAIL PANEL */}
           {selectedLead && (
             <div style={{background:'#1E293B',border:'1px solid #334155',borderRadius:'8px',padding:'20px',height:'fit-content',position:'sticky',top:'24px'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'20px'}}>
@@ -286,6 +369,77 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* CSV IMPORT MODAL */}
+      {showCSV && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+          <div style={{background:'#1E293B',borderRadius:'12px',padding:'32px',maxWidth:'560px',width:'100%',border:'1px solid #334155'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'24px'}}>
+              <h2 style={{fontSize:'20px',fontWeight:'700',color:'#fff'}}>📂 Import CSV Leads</h2>
+              <button onClick={() => { setShowCSV(false); setImportResult(null); }} style={{background:'none',border:'none',color:'#64748B',fontSize:'20px',cursor:'pointer'}}>✕</button>
+            </div>
+
+            <div style={{background:'#0F172A',borderRadius:'8px',padding:'20px',marginBottom:'24px',border:'1px solid #334155'}}>
+              <div style={{fontSize:'13px',fontWeight:'600',color:'#0EA5E9',marginBottom:'12px'}}>📋 Accepted CSV Column Names:</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
+                {[
+                  'owner_name / name / owner',
+                  'property_address / address',
+                  'city',
+                  'county',
+                  'phone1 / phone / mobile',
+                  'phone2 / alt_phone',
+                  'email1 / email',
+                  'permit_number / permit_no',
+                  'permit_date / issue_date / date',
+                  'job_value / value',
+                  'permit_type / description',
+                  'contractor / contractor_name',
+                ].map(col => (
+                  <div key={col} style={{fontSize:'11px',color:'#64748B',padding:'4px 8px',background:'#1E293B',borderRadius:'4px'}}>{col}</div>
+                ))}
+              </div>
+              <div style={{fontSize:'11px',color:'#475569',marginTop:'12px'}}>Your CSV can have any of these column names. Works with Tracerfy exports, Shovels exports, and custom spreadsheets.</div>
+            </div>
+
+            <div
+              style={{border:'2px dashed #334155',borderRadius:'8px',padding:'40px',textAlign:'center',cursor:'pointer',marginBottom:'20px'}}
+              onClick={() => fileRef.current?.click()}
+            >
+              <div style={{fontSize:'40px',marginBottom:'12px'}}>📁</div>
+              <div style={{fontSize:'15px',fontWeight:'600',color:'#fff',marginBottom:'4px'}}>Click to select your CSV file</div>
+              <div style={{fontSize:'13px',color:'#64748B'}}>or drag and drop here</div>
+              <input ref={fileRef} type="file" accept=".csv" onChange={handleCSVUpload} style={{display:'none'}}/>
+            </div>
+
+            {importing && (
+              <div style={{textAlign:'center',padding:'20px'}}>
+                <div style={{fontSize:'24px',marginBottom:'8px'}}>⏳</div>
+                <div style={{fontSize:'14px',color:'#0EA5E9',fontWeight:'600'}}>Importing leads...</div>
+              </div>
+            )}
+
+            {importResult && !importResult.error && (
+              <div style={{background:'#22C55E22',border:'1px solid #22C55E44',borderRadius:'8px',padding:'20px',textAlign:'center'}}>
+                <div style={{fontSize:'32px',marginBottom:'8px'}}>✅</div>
+                <div style={{fontSize:'18px',fontWeight:'700',color:'#22C55E',marginBottom:'4px'}}>{importResult.saved} Leads Imported!</div>
+                <div style={{fontSize:'13px',color:'#64748B'}}>{importResult.failed > 0 ? importResult.failed+' failed · ' : ''}{importResult.total} total rows in file</div>
+                <button onClick={() => { setShowCSV(false); setImportResult(null); }}
+                  style={{marginTop:'16px',background:'#22C55E',color:'#fff',border:'none',borderRadius:'6px',padding:'10px 24px',fontSize:'14px',fontWeight:'600',cursor:'pointer'}}>
+                  View Leads →
+                </button>
+              </div>
+            )}
+
+            {importResult?.error && (
+              <div style={{background:'#EF444422',border:'1px solid #EF444444',borderRadius:'8px',padding:'16px',textAlign:'center'}}>
+                <div style={{fontSize:'14px',color:'#EF4444'}}>{importResult.error}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ADD LEAD MODAL */}
       {showAddForm && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
           <div style={{background:'#1E293B',borderRadius:'12px',padding:'32px',maxWidth:'560px',width:'100%',maxHeight:'90vh',overflowY:'auto',border:'1px solid #334155'}}>

@@ -4,22 +4,29 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 const COUNTIES = ['All Counties','Miami-Dade','Broward','Palm Beach','Orange','Osceola','Seminole','Lake','Polk','Hillsborough','Collier','St. Lucie','Martin','Indian River'];
 const STATUSES = ['All','New','Called','Interested','Closed','Dead'];
+const statusColor = {
+  'New': '#0EA5E9',
+  'Called': '#F59E0B',
+  'Interested': '#8B5CF6',
+  'Closed': '#22C55E',
+  'Dead': '#EF4444',
+};
 
 export default function Dashboard() {
   const router = useRouter();
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [county, setCounty] = useState('All Counties');
   const [status, setStatus] = useState('All');
   const [search, setSearch] = useState('');
   const [stats, setStats] = useState({ total:0, new:0, called:0, interested:0, closed:0 });
-  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [selectedLead, setSelectedLead] = useState(null);
   const [notes, setNotes] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,7 +53,6 @@ export default function Dashboard() {
     if (status !== 'All') query = query.eq('status', status);
     const { data } = await query.limit(500);
     setLeads(data || []);
-
     const { data: all } = await supabase.from('leads').select('status');
     if (all) {
       setStats({
@@ -60,7 +66,7 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  const updateStatus = async (id: number, newStatus: string) => {
+  const updateStatus = async (id, newStatus) => {
     await supabase.from('leads').update({ status: newStatus }).eq('id', id);
     fetchLeads();
     if (selectedLead?.id === id) setSelectedLead({...selectedLead, status: newStatus});
@@ -73,7 +79,7 @@ export default function Dashboard() {
     alert('Notes saved!');
   };
 
-  const saveNewLead = async (): Promise<void> => {
+  const saveNewLead = async () => {
     if (!newLead.owner_name && !newLead.property_address) {
       alert('Please enter at least a name or address');
       return;
@@ -110,17 +116,21 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  const statusColor: Record<string, string> = {
-    'New': '#0EA5E9',
-    'Called': '#F59E0B',
-    'Interested': '#8B5CF6',
-    'Closed': '#22C55E',
-    'Dead': '#EF4444',
-  };
+  const fields = [
+    {label:'Owner Name',key:'owner_name',placeholder:'John Smith'},
+    {label:'Property Address',key:'property_address',placeholder:'123 Main St'},
+    {label:'City',key:'city',placeholder:'Miami'},
+    {label:'Phone 1',key:'phone1',placeholder:'(305) 555-0000'},
+    {label:'Phone 2',key:'phone2',placeholder:'(305) 555-0001'},
+    {label:'Email',key:'email1',placeholder:'owner@email.com'},
+    {label:'Permit Number',key:'permit_number',placeholder:'BLD-2026-00123'},
+    {label:'Job Value',key:'job_value',placeholder:'$25,000'},
+    {label:'Permit Date',key:'permit_date',placeholder:'2026-06-18'},
+    {label:'Contractor',key:'contractor',placeholder:'ABC Windows LLC'},
+  ];
 
   return (
     <div style={{minHeight:'100vh',background:'#0F172A'}}>
-      {/* NAV */}
       <div style={{background:'#1E293B',borderBottom:'1px solid #334155',padding:'0 24px',display:'flex',alignItems:'center',justifyContent:'space-between',height:'64px'}}>
         <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
           <span style={{fontSize:'24px'}}>🛡️</span>
@@ -137,7 +147,6 @@ export default function Dashboard() {
       </div>
 
       <div style={{padding:'24px'}}>
-        {/* STATS */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'16px',marginBottom:'24px'}}>
           {[
             {label:'Total Leads',value:stats.total,color:'#0EA5E9',icon:'📋'},
@@ -154,14 +163,9 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* FILTERS */}
         <div style={{background:'#1E293B',border:'1px solid #334155',borderRadius:'8px',padding:'16px',marginBottom:'16px',display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'center'}}>
-          <input
-            placeholder="Search name, address, phone..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{flex:1,minWidth:'200px',padding:'10px 14px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none'}}
-          />
+          <input placeholder="Search name, address, phone..." value={search} onChange={e => setSearch(e.target.value)}
+            style={{flex:1,minWidth:'200px',padding:'10px 14px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none'}}/>
           <select value={county} onChange={e => setCounty(e.target.value)}
             style={{padding:'10px 14px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none'}}>
             {COUNTIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -174,7 +178,6 @@ export default function Dashboard() {
         </div>
 
         <div style={{display:'grid',gridTemplateColumns:selectedLead ? '1fr 380px' : '1fr',gap:'16px'}}>
-          {/* LEADS TABLE */}
           <div style={{background:'#1E293B',border:'1px solid #334155',borderRadius:'8px',overflow:'hidden'}}>
             <div style={{padding:'16px 20px',borderBottom:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <div style={{fontSize:'15px',fontWeight:'600',color:'#fff'}}>{filtered.length} Leads</div>
@@ -196,7 +199,7 @@ export default function Dashboard() {
                     <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#64748B'}}>No leads yet. Click + Add Lead to add your first lead.</td></tr>
                   ) : filtered.map((lead, i) => (
                     <tr key={lead.id} onClick={() => { setSelectedLead(lead); setNotes(lead.notes || ''); }}
-                      style={{borderBottom:'1px solid #1E293B',cursor:'pointer',background:selectedLead?.id===lead.id?'#1E3A5F':i%2===0?'#1E293B':'#162032',transition:'background 0.1s'}}>
+                      style={{borderBottom:'1px solid #1E293B',cursor:'pointer',background:selectedLead?.id===lead.id?'#1E3A5F':i%2===0?'#1E293B':'#162032'}}>
                       <td style={{padding:'12px 16px',fontSize:'13px',color:'#fff',fontWeight:'500',whiteSpace:'nowrap'}}>{lead.owner_name || '—'}</td>
                       <td style={{padding:'12px 16px',fontSize:'12px',color:'#94A3B8',maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{lead.property_address || '—'}</td>
                       <td style={{padding:'12px 16px',fontSize:'12px',color:'#64748B',whiteSpace:'nowrap'}}>{lead.county || '—'}</td>
@@ -204,7 +207,7 @@ export default function Dashboard() {
                       <td style={{padding:'12px 16px',fontSize:'12px',color:'#64748B',whiteSpace:'nowrap'}}>{lead.permit_date || '—'}</td>
                       <td style={{padding:'12px 16px',fontSize:'12px',color:'#F59E0B',fontWeight:'600',whiteSpace:'nowrap'}}>{lead.job_value || '—'}</td>
                       <td style={{padding:'12px 16px'}}>
-                        <span style={{background:statusColor[lead.status]+'22',color:statusColor[lead.status],fontSize:'11px',fontWeight:'600',padding:'3px 10px',borderRadius:'12px'}}>{lead.status}</span>
+                        <span style={{background:(statusColor[lead.status]||'#0EA5E9')+'22',color:statusColor[lead.status]||'#0EA5E9',fontSize:'11px',fontWeight:'600',padding:'3px 10px',borderRadius:'12px'}}>{lead.status}</span>
                       </td>
                       <td style={{padding:'12px 16px'}}>
                         <div style={{display:'flex',gap:'4px'}} onClick={e => e.stopPropagation()}>
@@ -220,7 +223,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* LEAD DETAIL PANEL */}
           {selectedLead && (
             <div style={{background:'#1E293B',border:'1px solid #334155',borderRadius:'8px',padding:'20px',height:'fit-content',position:'sticky',top:'24px'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'20px'}}>
@@ -255,7 +257,7 @@ export default function Dashboard() {
                   {label:'Date Filed', value:selectedLead.permit_date},
                   {label:'Job Value', value:selectedLead.job_value},
                   {label:'Contractor', value:selectedLead.contractor},
-                ].map(item => item.value && (
+                ].filter(item => item.value).map(item => (
                   <div key={item.label} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #1E293B'}}>
                     <span style={{fontSize:'12px',color:'#64748B'}}>{item.label}</span>
                     <span style={{fontSize:'12px',color:'#fff',fontWeight:'500'}}>{item.value}</span>
@@ -267,7 +269,7 @@ export default function Dashboard() {
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
                   {['New','Called','Interested','Closed','Dead'].map(s => (
                     <button key={s} onClick={() => updateStatus(selectedLead.id, s)}
-                      style={{padding:'8px',background:selectedLead.status===s?statusColor[s]:'#0F172A',color:selectedLead.status===s?'#fff':statusColor[s],border:'1px solid '+statusColor[s]+'44',borderRadius:'6px',fontSize:'12px',fontWeight:'600',cursor:'pointer'}}>
+                      style={{padding:'8px',background:selectedLead.status===s?statusColor[s]:'#0F172A',color:selectedLead.status===s?'#fff':statusColor[s],border:'1px solid '+(statusColor[s]||'#0EA5E9')+'44',borderRadius:'6px',fontSize:'12px',fontWeight:'600',cursor:'pointer'}}>
                       {s}
                     </button>
                   ))}
@@ -284,7 +286,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ADD LEAD MODAL */}
       {showAddForm && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
           <div style={{background:'#1E293B',borderRadius:'12px',padding:'32px',maxWidth:'560px',width:'100%',maxHeight:'90vh',overflowY:'auto',border:'1px solid #334155'}}>
@@ -292,31 +293,15 @@ export default function Dashboard() {
               <h2 style={{fontSize:'20px',fontWeight:'700',color:'#fff'}}>Add New Lead</h2>
               <button onClick={() => setShowAddForm(false)} style={{background:'none',border:'none',color:'#64748B',fontSize:'20px',cursor:'pointer'}}>✕</button>
             </div>
-
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
-              {[
-                {label:'Owner Name',key:'owner_name',placeholder:'John Smith'},
-                {label:'Property Address',key:'property_address',placeholder:'123 Main St'},
-                {label:'City',key:'city',placeholder:'Miami'},
-                {label:'Phone 1',key:'phone1',placeholder:'(305) 555-0000'},
-                {label:'Phone 2',key:'phone2',placeholder:'(305) 555-0001'},
-                {label:'Email',key:'email1',placeholder:'owner@email.com'},
-                {label:'Permit Number',key:'permit_number',placeholder:'BLD-2026-00123'},
-                {label:'Job Value',key:'job_value',placeholder:'$25,000'},
-                {label:'Permit Date',key:'permit_date',placeholder:'2026-06-18'},
-                {label:'Contractor',key:'contractor',placeholder:'ABC Windows LLC'},
-              ].map(field => (
+              {fields.map(field => (
                 <div key={field.key}>
                   <label style={{display:'block',fontSize:'12px',fontWeight:'500',color:'#94A3B8',marginBottom:'6px'}}>{field.label}</label>
-                  <input
-                    placeholder={field.placeholder}
-                    value={newLead[field.key]}
+                  <input placeholder={field.placeholder} value={newLead[field.key]}
                     onChange={e => setNewLead({...newLead,[field.key]:e.target.value})}
-                    style={{width:'100%',padding:'10px 12px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none',boxSizing:'border-box'}}
-                  />
+                    style={{width:'100%',padding:'10px 12px',background:'#0F172A',border:'1px solid #334155',borderRadius:'6px',fontSize:'13px',color:'#fff',outline:'none',boxSizing:'border-box'}}/>
                 </div>
               ))}
-
               <div>
                 <label style={{display:'block',fontSize:'12px',fontWeight:'500',color:'#94A3B8',marginBottom:'6px'}}>County</label>
                 <select value={newLead.county} onChange={e => setNewLead({...newLead,county:e.target.value})}
@@ -324,7 +309,6 @@ export default function Dashboard() {
                   {COUNTIES.filter(c => c !== 'All Counties').map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-
               <div>
                 <label style={{display:'block',fontSize:'12px',fontWeight:'500',color:'#94A3B8',marginBottom:'6px'}}>Permit Type</label>
                 <select value={newLead.permit_type} onChange={e => setNewLead({...newLead,permit_type:e.target.value})}
@@ -337,7 +321,6 @@ export default function Dashboard() {
                 </select>
               </div>
             </div>
-
             <div style={{display:'flex',gap:'12px',marginTop:'24px'}}>
               <button onClick={saveNewLead} disabled={saving}
                 style={{flex:1,background:'#22C55E',color:'#fff',border:'none',borderRadius:'8px',padding:'14px',fontSize:'15px',fontWeight:'600',cursor:'pointer'}}>
